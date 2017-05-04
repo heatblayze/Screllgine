@@ -1,9 +1,4 @@
 ﻿  Screllgine.cpp
-c:\users\joshu\documents\github\screllgine\screllgine\source\screllgine.cpp(572): warning C4838: conversion from 'int' to 'uint32_t' requires a narrowing conversion
-  Generating Code...
-  Compiling...
-  main.cpp
-  Generating Code...
-LINK : warning LNK4098: defaultlib 'MSVCRT' conflicts with use of other libs; use /NODEFAULTLIB:library
-  Screllgine.vcxproj -> C:\Users\joshu\Documents\GitHub\Screllgine\Debug\Screllgine.exe
-  Screllgine.vcxproj -> C:\Users\joshu\Documents\GitHub\Screllgine\Debug\Screllgine.pdb (Partial PDB)
+c:\users\josh\documents\github\screllgine\screllgine\source\screllgine.cpp(913): warning C4838: conversion from 'int' to 'uint32_t' requires a narrowing conversion
+  Screllgine.vcxproj -> C:\Users\Josh\Documents\GitHub\Screllgine\Debug\Screllgine.exe
+  Screllgine.vcxproj -> C:\Users\Josh\Documents\GitHub\Screllgine\Debug\Screllgine.pdb (Partial PDB)

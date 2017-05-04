@@ -84,8 +84,8 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <LinkIncremental>true</LinkIncremental>
-    <IncludePath>C:\Users\joshu\Documents\GitHub\Screllgine\Screllgine\Header;$(IncludePath)</IncludePath>
-    <SourcePath>C:\Users\joshu\Documents\GitHub\Screllgine\Screllgine\Source;$(SourcePath)</SourcePath>
+    <IncludePath>$(ProjectDir)\Header;$(IncludePath)</IncludePath>
+    <SourcePath>$(ProjectDir)\Source;$(SourcePath)</SourcePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
@@ -105,11 +105,11 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>C:\Users\joshu\Documents\Visual Studio 2017\Libraries\glm;C:\Users\joshu\Documents\Visual Studio 2017\Libraries\glfw-3.2.1.bin.WIN32\include;C:\VulkanSDK\1.0.46.0\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\glm;C:\glfw\glfw-3.2.1.bin.WIN32\include;C:\VulkanSDK\1.0.46.0\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
-      <AdditionalLibraryDirectories>C:\VulkanSDK\1.0.46.0\Lib32;C:\Users\joshu\Documents\Visual Studio 2017\Libraries\glfw-3.2.1.bin.WIN32\lib-vc2015;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>C:\VulkanSDK\1.0.46.0\Lib32;C:\glfw\glfw-3.2.1.bin.WIN32\lib-vc2015;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <AdditionalDependencies>vulkan-1.lib;glfw3.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>

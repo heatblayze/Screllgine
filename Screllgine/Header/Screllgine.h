@@ -61,6 +61,8 @@ public:
 	void Start();
 	void Run();
 
+	void DrawFrame();
+
 	static glm::vec2 WindowSize();
 
 private:
@@ -72,7 +74,14 @@ private:
 	void InitLogicDevice();
 	void InitSwapChain();
 	void InitImageViews();
+	void InitRenderPass();
 	void InitGraphicsPipeline();
+	void InitFramebuffers();
+	void InitCommandPool();
+	void InitCommandBuffers();
+	void InitSemaphores();
+
+
 
 	void InitGLFW();
 	bool CheckValidationLayerSupport();
@@ -103,12 +112,14 @@ private:
 
 	GLFWwindow* m_gWindow;
 	VkPhysicalDevice m_pDevice;
-	std::vector<VkPhysicalDevice> m_svDevices;
 	VkQueue m_qGraphicsQueue;
 	VkQueue m_qPresentQueue;
-	std::vector<VkImage> m_svSwapChainImages;
 	VkFormat m_fSwapChainImageFormat;
 	VkExtent2D m_eSwapChainExtent;
+
+	std::vector<VkPhysicalDevice> m_svDevices;
+	std::vector<VkImage> m_svSwapChainImages;
+	std::vector<VkCommandBuffer> m_svCommandBuffers;
 
 	static int Width;
 	static int Height;
@@ -118,7 +129,16 @@ private:
 	VDeleter<VkDevice> m_vDevice{ vkDestroyDevice };
 	VDeleter<VkSurfaceKHR> m_vSurface{ m_vInstance, vkDestroySurfaceKHR };
 	VDeleter<VkSwapchainKHR> m_vSwapChain{ m_vDevice, vkDestroySwapchainKHR };
+	VDeleter<VkPipelineLayout> m_vPipelineLayout{ m_vDevice, vkDestroyPipelineLayout };
+	VDeleter<VkRenderPass> m_vRenderPass{ m_vDevice, vkDestroyRenderPass };
+	VDeleter<VkPipeline> m_vGraphicsPipeline{ m_vDevice, vkDestroyPipeline };
+	VDeleter<VkCommandPool> commandPool{ m_vDevice, vkDestroyCommandPool };
+	VDeleter<VkSemaphore> m_vImageAvailableSemaphore{ m_vDevice, vkDestroySemaphore };
+	VDeleter<VkSemaphore> m_vRenderFinishedSemaphore{ m_vDevice, vkDestroySemaphore };
+
+
 	std::vector<VDeleter<VkImageView>> m_vSwapChainImageViews;
+	std::vector<VDeleter<VkFramebuffer>> m_vSwapChainFramebuffers;
 
 
 	VDeleter<VkShaderModule> vertShaderModule{ m_vDevice, vkDestroyShaderModule };
