@@ -1,4 +1,4 @@
 ﻿  Screllgine.cpp
-c:\users\josh\documents\github\screllgine\screllgine\source\screllgine.cpp(913): warning C4838: conversion from 'int' to 'uint32_t' requires a narrowing conversion
-  Screllgine.vcxproj -> C:\Users\Josh\Documents\GitHub\Screllgine\Debug\Screllgine.exe
-  Screllgine.vcxproj -> C:\Users\Josh\Documents\GitHub\Screllgine\Debug\Screllgine.pdb (Partial PDB)
+c:\users\joshu\documents\github\screllgine\screllgine\source\screllgine.cpp(1140): warning C4838: conversion from 'int' to 'uint32_t' requires a narrowing conversion
+  Screllgine.vcxproj -> C:\Users\joshu\Documents\GitHub\Screllgine\Debug\Screllgine.exe
+  Screllgine.vcxproj -> C:\Users\joshu\Documents\GitHub\Screllgine\Debug\Screllgine.pdb (Partial PDB)

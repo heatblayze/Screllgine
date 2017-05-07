@@ -4,6 +4,13 @@
 #include <set>
 #include <fstream>
 #include <algorithm>
+#include "Vertex.h"
+#define GLM_FORCE_RADIANS
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+
+#include <chrono>
+
 
 const std::vector<const char*> validationLayers =
 {
@@ -13,6 +20,19 @@ const std::vector<const char*> validationLayers =
 const std::vector<const char*> deviceExtensions =
 {
 	VK_KHR_SWAPCHAIN_EXTENSION_NAME
+};
+
+const std::vector<Vertex> vertices =
+{
+	{ { -0.5f, -0.5f },{ 1.0f, 0.0f, 0.0f } },
+	{ { 0.5f, -0.5f },{ 0.0f, 1.0f, 0.0f } },
+	{ { 0.5f, 0.5f },{ 0.0f, 0.0f, 1.0f } },
+	{ { -0.5f, 0.5f },{ 1.0f, 1.0f, 1.0f } }
+};
+
+const std::vector<uint16_t> indices =
+{
+	0, 1, 2, 2, 3, 0
 };
 
 int Screllgine::Width = 800;
@@ -29,6 +49,8 @@ void Screllgine::Run()
 	while (!glfwWindowShouldClose(m_gWindow))
 	{
 		glfwPollEvents();
+
+		UpdateUniformBuffer();
 		DrawFrame();
 	}
 
@@ -42,7 +64,17 @@ void Screllgine::Run()
 void Screllgine::DrawFrame()
 {
 	uint32_t imageIndex;
-	vkAcquireNextImageKHR(m_vDevice, m_vSwapChain, std::numeric_limits<uint64_t>::max(), m_vImageAvailableSemaphore, VK_NULL_HANDLE, &imageIndex);
+	VkResult result = vkAcquireNextImageKHR(m_vDevice, m_vSwapChain, std::numeric_limits<uint64_t>::max(), m_vImageAvailableSemaphore, VK_NULL_HANDLE, &imageIndex);
+
+	if (result == VK_ERROR_OUT_OF_DATE_KHR)
+	{
+		RecreateSwapChain();
+		return;
+	}
+	else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
+	{
+		throw std::runtime_error("failed to acquire swap chain image!");
+	}
 
 	VkSubmitInfo submitInfo = {};
 	submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -76,7 +108,16 @@ void Screllgine::DrawFrame()
 	presentInfo.pImageIndices = &imageIndex;
 	presentInfo.pResults = nullptr; // Optional
 
-	vkQueuePresentKHR(m_qPresentQueue, &presentInfo);
+	result = vkQueuePresentKHR(m_qPresentQueue, &presentInfo);
+
+	if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
+	{
+		RecreateSwapChain();
+	}
+	else if (result != VK_SUCCESS)
+	{
+		throw std::runtime_error("failed to present swap chain image!");
+	}
 }
 
 
@@ -99,11 +140,29 @@ void Screllgine::InitVulkan()
 	InitSwapChain();
 	InitImageViews();
 	InitRenderPass();
+	InitDescriptor();
 	InitGraphicsPipeline();
 	InitFramebuffers();
 	InitCommandPool();
+	CreateVertexBuffer();
+	CreateIndexBuffer();
+	CreateUniformBuffer();
+	InitDescriptorPool();
+	InitDescriptorSet();
 	InitCommandBuffers();
 	InitSemaphores();
+}
+
+void Screllgine::RecreateSwapChain()
+{
+	vkDeviceWaitIdle(m_vDevice);
+
+	InitSwapChain();
+	InitImageViews();
+	InitRenderPass();
+	InitGraphicsPipeline();
+	InitFramebuffers();
+	InitCommandBuffers();
 }
 
 void Screllgine::InitInstance()
@@ -356,10 +415,15 @@ void Screllgine::InitSwapChain()
 	createInfo.clipped = VK_TRUE;
 	createInfo.oldSwapchain = VK_NULL_HANDLE;
 
-	if (vkCreateSwapchainKHR(m_vDevice, &createInfo, nullptr, m_vSwapChain.replace()) != VK_SUCCESS)
-	{
+	VkSwapchainKHR oldSwapChain = m_vSwapChain;
+	createInfo.oldSwapchain = oldSwapChain;
+
+	VkSwapchainKHR newSwapChain;
+	if (vkCreateSwapchainKHR(m_vDevice, &createInfo, nullptr, &newSwapChain) != VK_SUCCESS) {
 		throw std::runtime_error("failed to create swap chain!");
 	}
+
+	m_vSwapChain = newSwapChain;
 
 	vkGetSwapchainImagesKHR(m_vDevice, m_vSwapChain, &imageCount, nullptr);
 	m_svSwapChainImages.resize(imageCount);
@@ -443,6 +507,26 @@ void Screllgine::InitRenderPass()
 	}
 }
 
+void Screllgine::InitDescriptor()
+{
+	VkDescriptorSetLayoutBinding uboLayoutBinding = {};
+	uboLayoutBinding.binding = 0;
+	uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+	uboLayoutBinding.descriptorCount = 1;
+	uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+	uboLayoutBinding.pImmutableSamplers = nullptr; // Optional
+
+	VkDescriptorSetLayoutCreateInfo layoutInfo = {};
+	layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+	layoutInfo.bindingCount = 1;
+	layoutInfo.pBindings = &uboLayoutBinding;
+
+	if (vkCreateDescriptorSetLayout(m_vDevice, &layoutInfo, nullptr, m_vDescriptorSetLayout.replace()) != VK_SUCCESS)
+	{
+		throw std::runtime_error("failed to create descriptor set layout!");
+	}
+}
+
 void Screllgine::InitGraphicsPipeline()
 {
 	auto vertShaderCode = ReadFile("shaders/vert.spv");
@@ -468,10 +552,14 @@ void Screllgine::InitGraphicsPipeline()
 
 	VkPipelineVertexInputStateCreateInfo vertexInputInfo = {};
 	vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-	vertexInputInfo.vertexBindingDescriptionCount = 0;
-	vertexInputInfo.pVertexBindingDescriptions = nullptr; // Optional
-	vertexInputInfo.vertexAttributeDescriptionCount = 0;
-	vertexInputInfo.pVertexAttributeDescriptions = nullptr; // Optional
+
+	auto bindingDescription = Vertex::getBindingDescription();
+	auto attributeDescriptions = Vertex::getAttributeDescriptions();
+
+	vertexInputInfo.vertexBindingDescriptionCount = 1;
+	vertexInputInfo.vertexAttributeDescriptionCount = attributeDescriptions.size();
+	vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
+	vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions.data();
 
 	VkPipelineInputAssemblyStateCreateInfo inputAssembly = {};
 	inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
@@ -504,7 +592,7 @@ void Screllgine::InitGraphicsPipeline()
 	rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
 	rasterizer.lineWidth = 1.0f;
 	rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
-	rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
+	rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
 	rasterizer.depthBiasEnable = VK_FALSE;
 	rasterizer.depthBiasConstantFactor = 0.0f; // Optional
 	rasterizer.depthBiasClamp = 0.0f; // Optional
@@ -558,10 +646,11 @@ void Screllgine::InitGraphicsPipeline()
 	dynamicState.dynamicStateCount = 2;
 	dynamicState.pDynamicStates = dynamicStates;
 
+	VkDescriptorSetLayout setLayouts[] = { m_vDescriptorSetLayout };
 	VkPipelineLayoutCreateInfo pipelineLayoutInfo = {};
 	pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-	pipelineLayoutInfo.setLayoutCount = 0; // Optional
-	pipelineLayoutInfo.pSetLayouts = nullptr; // Optional
+	pipelineLayoutInfo.setLayoutCount = 1; // Optional
+	pipelineLayoutInfo.pSetLayouts = setLayouts;
 	pipelineLayoutInfo.pushConstantRangeCount = 0; // Optional
 	pipelineLayoutInfo.pPushConstantRanges = 0; // Optional
 
@@ -634,8 +723,105 @@ void Screllgine::InitCommandPool()
 	}
 }
 
+void Screllgine::CreateVertexBuffer()
+{
+	VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
+	VDeleter<VkBuffer> stagingBuffer{ m_vDevice, vkDestroyBuffer };
+	VDeleter<VkDeviceMemory> stagingBufferMemory{ m_vDevice, vkFreeMemory };
+	CreateBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
+
+	void* data;
+	vkMapMemory(m_vDevice, stagingBufferMemory, 0, bufferSize, 0, &data);
+		memcpy(data, vertices.data(), (size_t)bufferSize);
+	vkUnmapMemory(m_vDevice, stagingBufferMemory);
+
+	CreateBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_vVertexBuffer, m_vVertexBufferMemory);
+	CopyBuffer(stagingBuffer, m_vVertexBuffer, bufferSize);
+}
+
+void Screllgine::CreateIndexBuffer()
+{
+	VkDeviceSize bufferSize = sizeof(indices[0]) * indices.size();
+
+	VDeleter<VkBuffer> stagingBuffer{ m_vDevice, vkDestroyBuffer };
+	VDeleter<VkDeviceMemory> stagingBufferMemory{ m_vDevice, vkFreeMemory };
+	CreateBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
+
+	void* data;
+	vkMapMemory(m_vDevice, stagingBufferMemory, 0, bufferSize, 0, &data);
+		memcpy(data, indices.data(), (size_t)bufferSize);
+	vkUnmapMemory(m_vDevice, stagingBufferMemory);
+
+	CreateBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_vIndexBuffer, m_vIndexBufferMemory);
+	CopyBuffer(stagingBuffer, m_vIndexBuffer, bufferSize);
+}
+
+void Screllgine::CreateUniformBuffer()
+{
+	VkDeviceSize bufferSize = sizeof(UniformBufferObject);
+
+	CreateBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, m_vUniformStagingBuffer, m_vUniformStagingBufferMemory);
+	CreateBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_vUniformBuffer, m_vUniformBufferMemory);
+}
+
+void Screllgine::InitDescriptorPool()
+{
+	VkDescriptorPoolSize poolSize = {};
+	poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+	poolSize.descriptorCount = 1;
+
+	VkDescriptorPoolCreateInfo poolInfo = {};
+	poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+	poolInfo.poolSizeCount = 1;
+	poolInfo.pPoolSizes = &poolSize;
+	poolInfo.maxSets = 1;
+
+	if (vkCreateDescriptorPool(m_vDevice, &poolInfo, nullptr, m_vDescriptorPool.replace()) != VK_SUCCESS)
+	{
+		throw std::runtime_error("failed to create descriptor pool!");
+	}
+}
+
+void Screllgine::InitDescriptorSet()
+{
+	VkDescriptorSetLayout layouts[] = { m_vDescriptorSetLayout };
+	VkDescriptorSetAllocateInfo allocInfo = {};
+	allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+	allocInfo.descriptorPool = m_vDescriptorPool;
+	allocInfo.descriptorSetCount = 1;
+	allocInfo.pSetLayouts = layouts;
+
+	if (vkAllocateDescriptorSets(m_vDevice, &allocInfo, &m_sDescriptorSet) != VK_SUCCESS)
+	{
+		throw std::runtime_error("failed to allocate descriptor set!");
+	}
+
+	VkDescriptorBufferInfo bufferInfo = {};
+	bufferInfo.buffer = m_vUniformBuffer;
+	bufferInfo.offset = 0;
+	bufferInfo.range = sizeof(UniformBufferObject);
+
+	VkWriteDescriptorSet descriptorWrite = {};
+	descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+	descriptorWrite.dstSet = m_sDescriptorSet;
+	descriptorWrite.dstBinding = 0;
+	descriptorWrite.dstArrayElement = 0;
+	descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+	descriptorWrite.descriptorCount = 1;
+	descriptorWrite.pBufferInfo = &bufferInfo;
+	descriptorWrite.pImageInfo = nullptr; // Optional
+	descriptorWrite.pTexelBufferView = nullptr; // Optional
+
+	vkUpdateDescriptorSets(m_vDevice, 1, &descriptorWrite, 0, nullptr);
+}
+
 void Screllgine::InitCommandBuffers()
 {
+	if (m_svCommandBuffers.size() > 0)
+	{
+		vkFreeCommandBuffers(m_vDevice, commandPool, m_svCommandBuffers.size(), m_svCommandBuffers.data());
+	}
+
 	m_svCommandBuffers.resize(m_vSwapChainFramebuffers.size());
 
 	VkCommandBufferAllocateInfo allocInfo = {};
@@ -674,9 +860,16 @@ void Screllgine::InitCommandBuffers()
 
 		vkCmdBeginRenderPass(m_svCommandBuffers[i], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-		vkCmdBindPipeline(m_svCommandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, m_vGraphicsPipeline);
+			vkCmdBindPipeline(m_svCommandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, m_vGraphicsPipeline);
 
-		vkCmdDraw(m_svCommandBuffers[i], 3, 1, 0, 0);
+			VkBuffer vertexBuffers[] = { m_vVertexBuffer };
+			VkDeviceSize offsets[] = { 0 };
+			vkCmdBindVertexBuffers(m_svCommandBuffers[i], 0, 1, vertexBuffers, offsets);
+			vkCmdBindIndexBuffer(m_svCommandBuffers[i], m_vIndexBuffer, 0, VK_INDEX_TYPE_UINT16);
+			vkCmdBindDescriptorSets(m_svCommandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, m_vPipelineLayout, 0, 1, &m_sDescriptorSet, 0, nullptr);
+
+			//vkCmdDraw(m_svCommandBuffers[i], vertices.size(), 1, 0, 0);
+			vkCmdDrawIndexed(m_svCommandBuffers[i], indices.size(), 1, 0, 0, 0);
 
 		vkCmdEndRenderPass(m_svCommandBuffers[i]);
 
@@ -703,6 +896,34 @@ void Screllgine::InitSemaphores()
 	}
 }
 
+void Screllgine::CreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VDeleter<VkBuffer>& buffer, VDeleter<VkDeviceMemory>& bufferMemory)
+{
+	VkBufferCreateInfo bufferInfo = {};
+	bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+	bufferInfo.size = size;
+	bufferInfo.usage = usage;
+	bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+	if (vkCreateBuffer(m_vDevice, &bufferInfo, nullptr, buffer.replace()) != VK_SUCCESS)
+	{
+		throw std::runtime_error("failed to create buffer!");
+	}
+
+	VkMemoryRequirements memRequirements;
+	vkGetBufferMemoryRequirements(m_vDevice, buffer, &memRequirements);
+
+	VkMemoryAllocateInfo allocInfo = {};
+	allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+	allocInfo.allocationSize = memRequirements.size;
+	allocInfo.memoryTypeIndex = FindMemoryType(memRequirements.memoryTypeBits, properties);
+
+	if (vkAllocateMemory(m_vDevice, &allocInfo, nullptr, bufferMemory.replace()) != VK_SUCCESS)
+	{
+		throw std::runtime_error("failed to allocate buffer memory!");
+	}
+
+	vkBindBufferMemory(m_vDevice, buffer, bufferMemory, 0);
+}
 
 
 
@@ -720,7 +941,10 @@ void Screllgine::InitGLFW()
 	glfwInit();
 
 	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-	m_gWindow = glfwCreateWindow(Width, Height, "Vulkan window", nullptr, nullptr);
+	m_gWindow = glfwCreateWindow(Width, Height, "Screllgine", nullptr, nullptr);
+
+	glfwSetWindowUserPointer(m_gWindow, this);
+	glfwSetWindowSizeCallback(m_gWindow, Screllgine::OnWindowResized);
 }
 
 bool Screllgine::CheckValidationLayerSupport()
@@ -910,7 +1134,10 @@ VkExtent2D Screllgine::ChooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabili
 	}
 	else
 	{
-		VkExtent2D actualExtent = { Width, Height };
+		int width, height;
+		glfwGetWindowSize(m_gWindow, &width, &height);
+
+		VkExtent2D actualExtent = { width, height };
 
 		actualExtent.width = std::max(capabilities.minImageExtent.width, std::min(capabilities.maxImageExtent.width, actualExtent.width));
 		actualExtent.height = std::max(capabilities.minImageExtent.height, std::min(capabilities.maxImageExtent.height, actualExtent.height));
@@ -953,4 +1180,85 @@ void Screllgine::CreateShaderModule(const std::vector<char>& code, VDeleter<VkSh
 	{
 		throw std::runtime_error("failed to create shader module!");
 	}
+}
+
+void Screllgine::OnWindowResized(GLFWwindow* window, int width, int height)
+{
+	if (width == 0 || height == 0) return;
+
+	Screllgine* app = reinterpret_cast<Screllgine*>(glfwGetWindowUserPointer(window));
+	app->RecreateSwapChain();
+}
+
+uint32_t Screllgine::FindMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties)
+{
+	VkPhysicalDeviceMemoryProperties memProperties;
+	vkGetPhysicalDeviceMemoryProperties(m_pDevice, &memProperties);
+
+	for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++)
+	{
+		if ((typeFilter & (1 << i)) && (memProperties.memoryTypes[i].propertyFlags & properties) == properties)
+		{
+			return i;
+		}
+	}
+
+	throw std::runtime_error("failed to find suitable memory type!");
+}
+
+void Screllgine::CopyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size)
+{
+	VkCommandBufferAllocateInfo allocInfo = {};
+	allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+	allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+	allocInfo.commandPool = commandPool;
+	allocInfo.commandBufferCount = 1;
+
+	VkCommandBuffer commandBuffer;
+	vkAllocateCommandBuffers(m_vDevice, &allocInfo, &commandBuffer);
+
+	VkCommandBufferBeginInfo beginInfo = {};
+	beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+	beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+	vkBeginCommandBuffer(commandBuffer, &beginInfo);
+
+		VkBufferCopy copyRegion = {};
+		copyRegion.srcOffset = 0; // Optional
+		copyRegion.dstOffset = 0; // Optional
+		copyRegion.size = size;
+		vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
+
+	vkEndCommandBuffer(commandBuffer);
+
+	VkSubmitInfo submitInfo = {};
+	submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+	submitInfo.commandBufferCount = 1;
+	submitInfo.pCommandBuffers = &commandBuffer;
+
+	vkQueueSubmit(m_qGraphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
+	vkQueueWaitIdle(m_qGraphicsQueue);
+
+	vkFreeCommandBuffers(m_vDevice, commandPool, 1, &commandBuffer);
+}
+
+void Screllgine::UpdateUniformBuffer()
+{
+	static auto startTime = std::chrono::high_resolution_clock::now();
+
+	auto currentTime = std::chrono::high_resolution_clock::now();
+	float time = std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - startTime).count() / 1000.0f;
+
+	UniformBufferObject ubo = {};
+	ubo.model = glm::rotate(glm::mat4(), time * glm::radians(45.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+	ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+	ubo.proj = glm::perspective(glm::radians(60.0f), m_eSwapChainExtent.width / (float)m_eSwapChainExtent.height, 0.1f, 10.0f);
+	ubo.proj[1][1] *= -1;
+
+	void* data;
+	vkMapMemory(m_vDevice, m_vUniformStagingBufferMemory, 0, sizeof(ubo), 0, &data);
+		memcpy(data, &ubo, sizeof(ubo));
+	vkUnmapMemory(m_vDevice, m_vUniformStagingBufferMemory);
+
+	CopyBuffer(m_vUniformStagingBuffer, m_vUniformBuffer, sizeof(ubo));
 }

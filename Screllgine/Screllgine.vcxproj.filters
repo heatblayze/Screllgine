@@ -32,6 +32,9 @@
     <ClInclude Include="Source\VDeleter.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Header\Vertex.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="Shaders\shader.vert">

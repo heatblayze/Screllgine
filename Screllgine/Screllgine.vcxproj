@@ -24,6 +24,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Header\Screllgine.h" />
+    <ClInclude Include="Header\Vertex.h" />
     <ClInclude Include="Source\VDeleter.h" />
   </ItemGroup>
   <ItemGroup>
